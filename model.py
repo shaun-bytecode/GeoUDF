@@ -12,44 +12,70 @@ import pointnet2_ops.pointnet2_utils as utils
 import pytorch3d.ops
 import pytorch3d
 import torch.autograd as ag
+
+# Enable memory efficient operations
+if hasattr(torch.cuda, 'empty_cache'):
+    torch.cuda.empty_cache()
+
+# Set memory allocator configuration to reduce fragmentation
+os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:128'
   
 
 def knn(x, k):
-    inner = -2 * torch.matmul(x.transpose(2, 1), x)
-    xx = torch.sum(x ** 2, dim=1, keepdim=True)
-    pairwise_distance = -xx - inner - xx.transpose(2, 1)
-
-    idx = pairwise_distance.topk(k=k, dim=-1)[1]  # (batch_size, num_points, k)
-    return idx
-
+    # x: (batch_size, num_dims, num_points)
+    batch_size = x.size(0)
+    num_points = x.size(2)
+    
+    # Reshape to (batch_size, num_points, num_dims) for PyTorch3D
+    x_reshaped = x.transpose(1, 2).contiguous()
+    
+    # Use PyTorch3D's efficient KNN implementation
+    # Set sorted=False to reduce memory usage
+    # Use return_nn=False to save memory when we only need indices
+    _, idx, _ = pytorch3d.ops.knn_points(
+        x_reshaped, 
+        x_reshaped, 
+        K=k, 
+        return_nn=False, 
+        return_sorted=False
+    )
+    
+    return idx  # (batch_size, num_points, k)
 
 def get_graph_feature(x, k=20, idx=None):
     batch_size = x.size(0)
     num_points = x.size(2)
     x = x.view(batch_size, -1, num_points)
+    
     if idx is None:
         idx = knn(x, k=k)  # (batch_size, num_points, k)
+    
     device = x.device
-
-    idx_base = torch.arange(
-        0, batch_size, device=device).view(-1, 1, 1) * num_points
-
-    idx = idx + idx_base
-
-    idx = idx.view(-1)
-
     _, num_dims, _ = x.size()
-
-    x = x.transpose(2,
-                    1).contiguous()  # (batch_size, num_points, num_dims)  -> (batch_size*num_points, num_dims) #   batch_size * num_points * k + range(0, batch_size*num_points)
-    feature = x.view(batch_size * num_points, -1)[idx, :]
-    feature = feature.view(batch_size, num_points, k, num_dims)
-    x = x.view(batch_size, num_points, 1, num_dims).repeat(1, 1, k, 1)
-
-    feature = torch.cat((feature - x, x), dim=3).permute(0, 3, 1, 2).contiguous()  # (B,C,N,K)
-
-    return feature
-
+    
+    # Reshape to (batch_size, num_points, num_dims)
+    x_reshaped = x.transpose(2, 1).contiguous()  # (B, N, D)
+    
+    # Get neighbors using advanced indexing
+    batch_indices = torch.arange(batch_size, device=device).view(-1, 1, 1)
+    feature = x_reshaped[batch_indices, idx, :]  # (B, N, K, D)
+    
+    # Use broadcasting for center points
+    x_centered = x_reshaped.unsqueeze(2)  # (B, N, 1, D)
+    
+    # Calculate feature difference - avoid in-place operation for gradient computation
+    feature_diff = feature - x_centered  # (B, N, K, D)
+    
+    # Create output tensor with appropriate size
+    output = torch.cat([
+        feature_diff.permute(0, 3, 1, 2).contiguous(),
+        x_centered.expand_as(feature).permute(0, 3, 1, 2).contiguous()
+    ], dim=1)
+    
+    # Clear intermediate tensors to free memory
+    del feature, feature_diff, x_centered, x_reshaped, batch_indices
+    
+    return output  # (B, 2D, N, K)
 
 
 class PUGeo(nn.Module):
@@ -120,29 +146,94 @@ class PUGeo(nn.Module):
         batch_size = x.size(0)
         num_point = x.size(2)
         
-        edge_feature = get_graph_feature(x, k=self.knn)     #(B,6,N,20)
-        out1 = self.dgcnn_conv1(edge_feature)               #(B,128,N,20)    
-        out2 = self.dgcnn_conv2(out1)                       #(B,128,N,20)  
-        net_max_1 = out2.max(dim=-1, keepdim=False)[0]      #(B,128,N)
-        net_mean_1 = out2.mean(dim=-1, keepdim=False)       #(B,128,N)
+        # Process points in batches to reduce memory usage
+        batch_size_points = 256  # Adjust this based on available GPU memory
+        
+        if num_point > batch_size_points:
+            # Initialize output tensors
+            net_max_1 = torch.zeros(batch_size, 128, num_point, device=x.device)
+            net_mean_1 = torch.zeros(batch_size, 128, num_point, device=x.device)
+            out3 = torch.zeros(batch_size, 128, num_point, device=x.device)
+            net_max_2 = torch.zeros(batch_size, 128, num_point, device=x.device)
+            net_mean_2 = torch.zeros(batch_size, 128, num_point, device=x.device)
+            out5 = torch.zeros(batch_size, 128, num_point, device=x.device)
+            net_max_3 = torch.zeros(batch_size, 128, num_point, device=x.device)
+            net_mean_3 = torch.zeros(batch_size, 128, num_point, device=x.device)
+            out7 = torch.zeros(batch_size, 128, num_point, device=x.device)
+            
+            # Process in batches
+            for i in range(0, num_point, batch_size_points):
+                end = min(i + batch_size_points, num_point)
+                x_batch = x[:, :, i:end]
+                
+                # Clear CUDA cache to avoid fragmentation
+                torch.cuda.empty_cache()
+                
+                # First layer
+                edge_feature = get_graph_feature(x_batch, k=self.knn)
+                out1_batch = self.dgcnn_conv1(edge_feature)
+                out2_batch = self.dgcnn_conv2(out1_batch)
+                net_max_1[:, :, i:end] = out2_batch.max(dim=-1, keepdim=False)[0]
+                net_mean_1[:, :, i:end] = out2_batch.mean(dim=-1, keepdim=False)
+                
+                # Clear CUDA cache
+                torch.cuda.empty_cache()
+                
+                # Second layer
+                out3_batch = self.dgcnn_conv3(torch.cat((net_max_1[:, :, i:end], net_mean_1[:, :, i:end]), 1))
+                out3[:, :, i:end] = out3_batch
+                
+                edge_feature = get_graph_feature(out3_batch, k=self.knn)
+                out4_batch = self.dgcnn_conv4(edge_feature)
+                net_max_2[:, :, i:end] = out4_batch.max(dim=-1, keepdim=False)[0]
+                net_mean_2[:, :, i:end] = out4_batch.mean(dim=-1, keepdim=False)
+                
+                # Clear CUDA cache
+                torch.cuda.empty_cache()
+                
+                # Third layer
+                out5_batch = self.dgcnn_conv5(torch.cat((net_max_2[:, :, i:end], net_mean_2[:, :, i:end]), 1))
+                out5[:, :, i:end] = out5_batch
+                
+                edge_feature = get_graph_feature(out5_batch, k=self.knn)
+                out6_batch = self.dgcnn_conv6(edge_feature)
+                net_max_3[:, :, i:end] = out6_batch.max(dim=-1, keepdim=False)[0]
+                net_mean_3[:, :, i:end] = out6_batch.mean(dim=-1, keepdim=False)
+                
+                # Clear CUDA cache
+                torch.cuda.empty_cache()
+                
+                # Final layer
+                out7_batch = self.dgcnn_conv7(torch.cat((net_max_3[:, :, i:end], net_mean_3[:, :, i:end]), dim=1))
+                out7[:, :, i:end] = out7_batch
+                
+                # Clear CUDA cache
+                torch.cuda.empty_cache()
+        else:
+            # Process all points at once if memory is sufficient
+            edge_feature = get_graph_feature(x, k=self.knn)     #(B,6,N,20)
+            out1 = self.dgcnn_conv1(edge_feature)               #(B,128,N,20)    
+            out2 = self.dgcnn_conv2(out1)                       #(B,128,N,20)  
+            net_max_1 = out2.max(dim=-1, keepdim=False)[0]      #(B,128,N)
+            net_mean_1 = out2.mean(dim=-1, keepdim=False)       #(B,128,N)
 
-        out3 = self.dgcnn_conv3(torch.cat((net_max_1, net_mean_1), 1))      #(B,128,N)
+            out3 = self.dgcnn_conv3(torch.cat((net_max_1, net_mean_1), 1))      #(B,128,N)
 
-        edge_feature = get_graph_feature(out3, k=self.knn)      #(B,256,N,20)
-        out4 = self.dgcnn_conv4(edge_feature)                   #(B,128,N,20)
+            edge_feature = get_graph_feature(out3, k=self.knn)      #(B,256,N,20)
+            out4 = self.dgcnn_conv4(edge_feature)                   #(B,128,N,20)
 
-        net_max_2 = out4.max(dim=-1, keepdim=False)[0]          #(B,128,N)
-        net_mean_2 = out4.mean(dim=-1, keepdim=False)           #(B,128,N)
+            net_max_2 = out4.max(dim=-1, keepdim=False)[0]          #(B,128,N)
+            net_mean_2 = out4.mean(dim=-1, keepdim=False)           #(B,128,N)
 
-        out5 = self.dgcnn_conv5(torch.cat((net_max_2, net_mean_2), 1))  #(B,128,N)
+            out5 = self.dgcnn_conv5(torch.cat((net_max_2, net_mean_2), 1))  #(B,128,N)
 
-        edge_feature = get_graph_feature(out5,k=self.knn)       #(B,256,N,20)
-        out6 = self.dgcnn_conv6(edge_feature)                   #(B,128,N,20)
+            edge_feature = get_graph_feature(out5,k=self.knn)       #(B,256,N,20)
+            out6 = self.dgcnn_conv6(edge_feature)                   #(B,128,N,20)
 
-        net_max_3 = out6.max(dim=-1, keepdim=False)[0]          #(B,128,N)
-        net_mean_3 = out6.mean(dim=-1, keepdim=False)           #(B,128,N)
+            net_max_3 = out6.max(dim=-1, keepdim=False)[0]          #(B,128,N)
+            net_mean_3 = out6.mean(dim=-1, keepdim=False)           #(B,128,N)
 
-        out7 = self.dgcnn_conv7(torch.cat((net_max_3, net_mean_3), dim=1))
+            out7 = self.dgcnn_conv7(torch.cat((net_max_3, net_mean_3), dim=1))
 
         concat = torch.cat((net_max_1,      # 128
                             net_mean_1,     # 128

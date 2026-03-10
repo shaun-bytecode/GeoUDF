@@ -1,0 +1,10 @@
+# ninja log v5
+1	12767	1768816227551648041	/data/Share/Student/2025/benkedachuang/wubo/GeoUDF/pointnet2_ops_lib/build/temp.linux-x86_64-cpython-39/pointnet2_ops/_ext-src/src/group_points.o	fdb5aeef0416d00d
+0	12809	1768816227599648608	/data/Share/Student/2025/benkedachuang/wubo/GeoUDF/pointnet2_ops_lib/build/temp.linux-x86_64-cpython-39/pointnet2_ops/_ext-src/src/ball_query.o	a7ce650d09cec130
+1	12909	1768816227695649742	/data/Share/Student/2025/benkedachuang/wubo/GeoUDF/pointnet2_ops_lib/build/temp.linux-x86_64-cpython-39/pointnet2_ops/_ext-src/src/interpolate.o	326ae9bea15285c3
+0	13067	1768816227859651678	/data/Share/Student/2025/benkedachuang/wubo/GeoUDF/pointnet2_ops_lib/build/temp.linux-x86_64-cpython-39/pointnet2_ops/_ext-src/src/bindings.o	a8d91241119a96e
+0	13690	1768816228483659045	/data/Share/Student/2025/benkedachuang/wubo/GeoUDF/pointnet2_ops_lib/build/temp.linux-x86_64-cpython-39/pointnet2_ops/_ext-src/src/sampling.o	114eaa9a36d72689
+1	42833	1768816257604001593	/data/Share/Student/2025/benkedachuang/wubo/GeoUDF/pointnet2_ops_lib/build/temp.linux-x86_64-cpython-39/pointnet2_ops/_ext-src/src/interpolate_gpu.o	74fc1a79131d8ad1
+1	43294	1768816258068007032	/data/Share/Student/2025/benkedachuang/wubo/GeoUDF/pointnet2_ops_lib/build/temp.linux-x86_64-cpython-39/pointnet2_ops/_ext-src/src/group_points_gpu.o	24932351ccfcc0c3
+0	43478	1768816258252009188	/data/Share/Student/2025/benkedachuang/wubo/GeoUDF/pointnet2_ops_lib/build/temp.linux-x86_64-cpython-39/pointnet2_ops/_ext-src/src/ball_query_gpu.o	b2715b0e018b3da6
+1	44333	1768816259108019219	/data/Share/Student/2025/benkedachuang/wubo/GeoUDF/pointnet2_ops_lib/build/temp.linux-x86_64-cpython-39/pointnet2_ops/_ext-src/src/sampling_gpu.o	efb9677345350e9a

@@ -1,5 +1,5 @@
 import os
-os.environ['CUDA_VISIBLE_DEVICES']='0'
+os.environ['CUDA_VISIBLE_DEVICES']='6'
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -104,7 +104,10 @@ if __name__=='__main__':
     loss_sum_dense_l2_test_best=1e10
 
     global_step=0
-
+    
+    # Gradient accumulation steps - reduce batch size effectively
+    grad_accumulation_steps = 2
+    
     for epoch in range(arg.max_epoch):
         #scheduler.step()
         
@@ -133,44 +136,57 @@ if __name__=='__main__':
             gt_udf=gt_udf.cuda()
 
             batch_size,_,num_point=input_sparse_xyz.size()
-
-            optimizer.zero_grad()
+            
+            # Zero gradients only at the start of accumulation
+            if global_step % grad_accumulation_steps == 1:
+                optimizer.zero_grad()
 
             pu_model.train()
             udf_model.train()
-            output_dict=pu_model(input_sparse_xyz)
             
-            dense_xyz=output_dict['dense_xyz']
-            dense_normal=output_dict['dense_normal']
+            # Use torch.cuda.amp for automatic mixed precision to save memory
+            with torch.cuda.amp.autocast(enabled=True):
+                output_dict=pu_model(input_sparse_xyz)
+                
+                dense_xyz=output_dict['dense_xyz']
+                dense_normal=output_dict['dense_normal']
 
-            output_dict['dense_xyz']=dense_xyz.detach()
-            output_dict['dense_normal']=dense_normal.detach()
-            
+                output_dict['dense_xyz']=dense_xyz.detach()
+                output_dict['dense_normal']=dense_normal.detach()
+                
 
-            pred_udf,pred_udf_grad=udf_model(output_dict,sample_points)
-            
-            gt_udf_grad=F.normalize(sample_points-closest_points,dim=1).transpose(1,2)  #(B,M,3)
+                pred_udf,pred_udf_grad=udf_model(output_dict,sample_points)
+                
+                gt_udf_grad=F.normalize(sample_points-closest_points,dim=1).transpose(1,2)  #(B,M,3)
 
-            #pred_udf_grad=diff(pred_udf,sample_points.transpose(1,2))   #(B,M,3)
-            #print(pred_udf_grad.size())
+                cd_loss=chamfer_distance(dense_xyz.reshape(batch_size,-1,3),gt_dense_xyz.transpose(1,2))[0]
 
-            cd_loss=chamfer_distance(dense_xyz.reshape(batch_size,-1,3),gt_dense_xyz.transpose(1,2))[0]
-
-            l1_dist=torch.mean(torch.abs(pred_udf-gt_udf))
+                l1_dist=torch.mean(torch.abs(pred_udf-gt_udf))
 
 
-            udf_grad_loss=torch.mean(1-torch.sum(gt_udf_grad*pred_udf_grad,dim=2))
+                udf_grad_loss=torch.mean(1-torch.sum(gt_udf_grad*pred_udf_grad,dim=2))
 
-            loss_all=arg.lambda1*cd_loss+arg.lambda2*l1_dist+arg.lambda3*udf_grad_loss
+                loss_all=arg.lambda1*cd_loss+arg.lambda2*l1_dist+arg.lambda3*udf_grad_loss
+                
+                # Scale loss for gradient accumulation
+                loss_all = loss_all / grad_accumulation_steps
 
             loss_all.backward()
-            optimizer.step()
+            
+            # Only update weights after accumulation
+            if global_step % grad_accumulation_steps == 0:
+                optimizer.step()
+                # Clear cache after optimizer step
+                torch.cuda.empty_cache()
 
-            loss_sum_all.append(loss_all.detach().cpu().numpy())
+            loss_sum_all.append(loss_all.detach().cpu().numpy() * grad_accumulation_steps)
             loss_sum_dense_cd.append(cd_loss.detach().cpu().numpy())
             loss_sum_l2_dist.append(l1_dist.detach().cpu().numpy())
             loss_sum_udf_grad.append(udf_grad_loss.detach().cpu().numpy())
-            #break
+            
+            # Periodically clear CUDA cache to prevent fragmentation
+            if global_step % 10 == 0:
+                torch.cuda.empty_cache()
 
             if global_step%50==0:
                 writer.add_scalar('cd_loss', cd_loss.detach().cpu().numpy().mean(), global_step)
@@ -214,20 +230,28 @@ if __name__=='__main__':
                 
                 pu_model.eval()
                 udf_model.eval()
-                output_dict=pu_model(input_sparse_xyz)
                 
-                dense_xyz=output_dict['dense_xyz']
-                dense_normal=output_dict['dense_normal']
+                # Use torch.no_grad() for evaluation to save memory
+                with torch.no_grad():
+                    with torch.cuda.amp.autocast(enabled=True):
+                        output_dict=pu_model(input_sparse_xyz)
+                        
+                        dense_xyz=output_dict['dense_xyz']
+                        dense_normal=output_dict['dense_normal']
 
-                pred_udf,_=udf_model(output_dict,sample_points)
-                
-                cd_loss=chamfer_distance(dense_xyz.reshape(batch_size,-1,3),gt_dense_xyz.transpose(1,2))[0]
+                        pred_udf,_=udf_model(output_dict,sample_points)
+                        
+                        cd_loss=chamfer_distance(dense_xyz.reshape(batch_size,-1,3),gt_dense_xyz.transpose(1,2))[0]
 
-                l2_dist=torch.mean(torch.abs(pred_udf-gt_udf))
+                        l2_dist=torch.mean(torch.abs(pred_udf-gt_udf))
 
-                loss_all=100*cd_loss+l2_dist
+                        loss_all=100*cd_loss+l2_dist
 
                 loss_sum_dense_l2_test.append(l2_dist.detach().cpu().numpy())
+                
+                # Clear cache periodically during testing
+                if len(loss_sum_dense_l2_test) % 10 == 0:
+                    torch.cuda.empty_cache()
             
             
         loss_sum_dense_l2_test = np.asarray(loss_sum_dense_l2_test).mean()

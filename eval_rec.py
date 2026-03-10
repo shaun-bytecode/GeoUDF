@@ -1,6 +1,6 @@
 import sys
 import os
-os.environ['CUDA_VISIBLE_DEVICES']='0'
+os.environ['CUDA_VISIBLE_DEVICES']='6'
 import numpy as np
 import pytorch3d
 import pytorch3d.ops
@@ -547,10 +547,11 @@ if __name__=='__main__':
 
 
     sparse_pc=torch.from_numpy(sparse_pc).unsqueeze(0).transpose(1,2).cuda().float()
-    output_dict=pu_model(sparse_pc)
+    with torch.no_grad():
+        output_dict=pu_model(sparse_pc)
 
-    dense_pc=output_dict['dense_xyz'].detach()           #(1,3,N)
-    dense_normal=output_dict['dense_normal'].detach()    #(1,3,N)
+    dense_pc=output_dict['dense_xyz']           #(1,3,N)
+    dense_normal=output_dict['dense_normal']    #(1,3,N)
 
     max_batch=2**16
 
@@ -605,17 +606,28 @@ if __name__=='__main__':
 
     grids_udf=grids_udf_flatten.reshape(N,N,N)
     grids_udf_grad=grids_udf_grad_flatten.reshape(N,N,N,3)
+    
+    print(f"UDF min: {grids_udf.min()}, max: {grids_udf.max()}")
+    print(f"UDF values < voxel_size*2: {np.sum(grids_udf < voxel_size*2)}")
+    print(f"voxel_size: {voxel_size}")
 
     vs,fs=custom_marching_cube(grids_coords,grids_udf,grids_udf_grad,voxel_size,N)
+    
+    print(f"Generated vertices: {len(vs)}, faces: {len(fs)}")
 
-    if arg.scale:
-        vs=vs*scale+center
+    if len(vs) == 0:
+        print("Warning: No vertices generated. The reconstruction failed.")
+        dummy_mesh = trimesh.Trimesh()
+        dummy_mesh.export(arg.output)
+        torch.cuda.empty_cache()
+    else:
+        if arg.scale:
+            vs=vs*scale+center
 
-    mesh=trimesh.Trimesh(vs,fs)
+        mesh=trimesh.Trimesh(vs,fs)
 
-    mesh.remove_duplicate_faces()
-    mesh.remove_degenerate_faces()
-    mesh.fill_holes()
+        mesh.process()
+        mesh.fill_holes()
 
-    mesh.export(arg.output)
-    torch.cuda.empty_cache()
+        mesh.export(arg.output)
+        torch.cuda.empty_cache()
