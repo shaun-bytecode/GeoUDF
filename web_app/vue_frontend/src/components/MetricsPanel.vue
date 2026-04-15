@@ -372,8 +372,8 @@ onMounted(() => {
   gap: 5px;
   padding: 3px 10px;
   border-radius: 12px;
-  background: rgba(var(--kc), 0.07);
-  border: 1px solid color-mix(in srgb, var(--kc) 20%, transparent);
+  background: color-mix(in srgb, var(--kc) 10%, white);
+  border: 1px solid color-mix(in srgb, var(--kc) 22%, transparent);
 }
 
 .pill-label {

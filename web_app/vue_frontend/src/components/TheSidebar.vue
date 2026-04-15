@@ -70,7 +70,7 @@
       <span class="setting-label">分辨率</span>
       <div class="seg-control">
         <button
-          v-for="res in [128, 192, 256]"
+          v-for="res in [128, 192]"
           :key="res"
           class="seg-btn"
           :class="{ active: resolution === res }"
@@ -264,32 +264,45 @@ function onFileInputChange(e) {
 
 <style scoped>
 .sidebar {
-  width: 256px;
+  width: 272px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  padding: 10px 10px 14px 12px;
+  padding: 12px 12px 16px 14px;
   overflow-y: auto;
   overflow-x: hidden;
-  gap: 6px;
+  gap: 7px;
   position: relative;
   z-index: 1;
-  background: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.78);
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
-  border-right: 1px solid rgba(79, 70, 229, 0.07);
+  border-right: 1px solid rgba(79, 70, 229, 0.08);
   font-family: var(--font);
 }
 
 /* ── Section label ── */
 .section-label {
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.09em;
+  letter-spacing: 0.1em;
   color: #A5B4FC;
   padding: 0 2px;
-  margin-top: 2px;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.section-label::before {
+  content: '';
+  display: inline-block;
+  width: 2px;
+  height: 10px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #6366F1, #A855F7);
+  flex-shrink: 0;
 }
 
 .section-label-row {
@@ -298,20 +311,22 @@ function onFileInputChange(e) {
   gap: 8px;
 }
 
+.section-label-row .section-label::before { display: none; }
+
 .divider {
   height: 1px;
-  background: rgba(99, 102, 241, 0.08);
-  margin: 4px 0;
+  background: linear-gradient(90deg, rgba(99, 102, 241, 0.12), transparent);
+  margin: 5px 0;
 }
 
 /* ── Drop zone ── */
 .drop-zone {
-  border: 1.5px dashed rgba(99, 102, 241, 0.22);
+  border: 1.5px dashed rgba(99, 102, 241, 0.2);
   border-radius: 10px;
-  padding: 12px 10px;
+  padding: 10px 10px;
   text-align: center;
   cursor: pointer;
-  background: rgba(99, 102, 241, 0.02);
+  background: rgba(99, 102, 241, 0.025);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -326,8 +341,9 @@ function onFileInputChange(e) {
 }
 
 .drop-icon {
-  font-size: 14px;
+  font-size: 13px;
   color: #A5B4FC;
+  line-height: 1;
 }
 
 .drop-text {
@@ -346,13 +362,16 @@ function onFileInputChange(e) {
 .file-tabs {
   display: flex;
   align-items: center;
+  background: rgba(99, 102, 241, 0.05);
+  border-radius: 9px;
+  padding: 2px;
   gap: 2px;
 }
 
 .file-tab {
   flex: 1;
   padding: 5px 6px;
-  border-radius: 8px;
+  border-radius: 7px;
   border: none;
   font-size: 11px;
   font-weight: 500;
@@ -364,14 +383,15 @@ function onFileInputChange(e) {
 }
 
 .file-tab.active {
-  background: rgba(99, 102, 241, 0.1);
+  background: white;
   color: #6366F1;
+  box-shadow: 0 1px 4px rgba(99, 102, 241, 0.12);
 }
 
 .tab-action {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
   border: none;
   background: transparent;
   color: #94A3B8;
@@ -386,7 +406,7 @@ function onFileInputChange(e) {
 }
 
 .tab-action:hover {
-  background: rgba(99, 102, 241, 0.08);
+  background: rgba(99, 102, 241, 0.1);
   color: #6366F1;
 }
 
@@ -395,7 +415,7 @@ function onFileInputChange(e) {
   display: flex;
   flex-direction: column;
   gap: 1px;
-  max-height: 160px;
+  max-height: 185px;
   overflow-y: auto;
 }
 
@@ -415,8 +435,8 @@ function onFileInputChange(e) {
 }
 
 .file-item.selected {
-  background: rgba(99, 102, 241, 0.09);
-  border-color: rgba(99, 102, 241, 0.18);
+  background: rgba(99, 102, 241, 0.08);
+  border-color: rgba(99, 102, 241, 0.2);
 }
 
 .file-icon {
@@ -450,7 +470,7 @@ function onFileInputChange(e) {
   text-align: center;
   font-size: 11px;
   color: #CBD5E1;
-  padding: 12px 0;
+  padding: 14px 0;
 }
 
 /* ── Settings ── */
@@ -459,7 +479,11 @@ function onFileInputChange(e) {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  min-height: 28px;
+  min-height: 30px;
+  padding: 2px 6px;
+  border-radius: 8px;
+  background: rgba(248, 250, 255, 0.6);
+  border: 1px solid rgba(99, 102, 241, 0.05);
 }
 
 .setting-label {
@@ -480,7 +504,7 @@ function onFileInputChange(e) {
   border: 1px solid rgba(99, 102, 241, 0.18);
   border-radius: 6px;
   padding: 2px 8px;
-  max-width: 150px;
+  max-width: 152px;
   overflow: hidden;
 }
 
@@ -497,29 +521,30 @@ function onFileInputChange(e) {
 /* Segmented control */
 .seg-control {
   display: flex;
-  background: rgba(99, 102, 241, 0.07);
+  background: rgba(99, 102, 241, 0.08);
   border-radius: 8px;
   padding: 2px;
   gap: 1px;
 }
 
 .seg-btn {
-  padding: 4px 8px;
+  padding: 4px 14px;
   border-radius: 6px;
   border: none;
-  font-size: 11px;
-  font-weight: 500;
-  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  font-family: var(--mono);
   cursor: pointer;
   background: transparent;
   color: #64748B;
   transition: all 0.12s;
+  letter-spacing: 0.01em;
 }
 
 .seg-btn.active {
   background: white;
   color: #6366F1;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 4px rgba(99, 102, 241, 0.15);
 }
 
 /* Toggle */
@@ -529,8 +554,8 @@ function onFileInputChange(e) {
 }
 
 .toggle-track {
-  width: 32px;
-  height: 17px;
+  width: 34px;
+  height: 18px;
   border-radius: 9px;
   background: #E2E8F0;
   position: relative;
@@ -543,24 +568,24 @@ function onFileInputChange(e) {
 
 .toggle-thumb {
   position: absolute;
-  top: 2px;
-  left: 2px;
+  top: 2.5px;
+  left: 2.5px;
   width: 13px;
   height: 13px;
   border-radius: 50%;
   background: white;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
   transition: transform 0.2s ease;
 }
 
 .toggle-track.on .toggle-thumb {
-  transform: translateX(15px);
+  transform: translateX(16px);
 }
 
 /* Reconstruct button */
 .btn-reconstruct {
   width: 100%;
-  padding: 9px 14px;
+  padding: 10px 14px;
   border-radius: 10px;
   border: none;
   background: linear-gradient(135deg, #6366F1, #A855F7);
@@ -574,19 +599,25 @@ function onFileInputChange(e) {
   align-items: center;
   justify-content: center;
   gap: 7px;
-  margin-top: 2px;
+  margin-top: 4px;
+  letter-spacing: 0.01em;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.2);
 }
 
 .btn-reconstruct:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 6px 18px rgba(99, 102, 241, 0.35);
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.38);
 }
 
-.btn-reconstruct:active:not(:disabled) { transform: translateY(0); }
+.btn-reconstruct:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.2);
+}
 
 .btn-reconstruct:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
+  box-shadow: none;
 }
 
 .btn-spinner {
@@ -634,10 +665,11 @@ function onFileInputChange(e) {
   font-size: 11px;
   font-weight: 700;
   color: #6366F1;
+  font-family: var(--mono);
 }
 
 .progress-track {
-  height: 4px;
+  height: 5px;
   background: rgba(99, 102, 241, 0.1);
   border-radius: 10px;
   overflow: hidden;
@@ -661,15 +693,16 @@ function onFileInputChange(e) {
 }
 
 .log-area {
-  max-height: 120px;
+  max-height: 150px;
   overflow-y: auto;
   font-family: var(--mono);
   font-size: 10px;
-  line-height: 1.6;
+  line-height: 1.65;
   color: #475569;
-  background: rgba(241, 245, 249, 0.7);
+  background: rgba(241, 245, 249, 0.8);
+  border: 1px solid rgba(99, 102, 241, 0.07);
   border-radius: 8px;
-  padding: 7px 9px;
+  padding: 8px 10px;
 }
 
 .log-line { white-space: pre-wrap; word-break: break-all; }
